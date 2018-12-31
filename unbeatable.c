@@ -2,22 +2,27 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+
+// Defines a spot on the board
 typedef enum { empty = -1, x = 1, o = 0 } spot; 
+
+// Defines all possible game(board) states
 typedef enum { xwin, owin, tie, nowin } gamestate;
 
+// Defines a node, used to make a tree of all possible board states
 typedef struct nodetag node;
 
 struct nodetag {
 	spot board[9];
 	spot movesNext;
-	void (*mPrintNode) (const node* self);
 	node* nextMoves[9];
 	int score;
 
 };
 
 
-
+// Prints a spot on the board, row-col 0-indexed
+// eg. (0, 1) is top middle spot
 void printSpot(const node* self, int i, int j) {	
 	spot curSpot = self->board[3 * i + j];
 	if(curSpot == x) { printf("X"); }
@@ -25,8 +30,7 @@ void printSpot(const node* self, int i, int j) {
 	else printf(" ");
 };
 
-
-
+//Prints the board at this node
 void printBoard (const node* self) {
 	printf("\n");
 	for(int i = 0; i < 3; ++i) {
@@ -39,7 +43,8 @@ void printBoard (const node* self) {
 	printf("\n");
 };
 
-
+// Create (allocate) a new node with given next move
+// ie. creates the head of the tree
 node* node_create(spot firstmove) {
 	node* n = (node*) malloc(sizeof(node));
 	spot* tmpB = n->board;
@@ -49,53 +54,68 @@ node* node_create(spot firstmove) {
 		tmpN[i] = NULL;
 	}
 	n->movesNext = firstmove;
-	n->mPrintNode = printBoard;
 	n->score = 0;
 	return n;
 }
 
-
-//does either player win on a column? xwin, owin, nowin -> maybe tie, maybe full
-gamestate col_win(const node* n) {
+// Return which player what wins on ith column.
+// If no clear winner, return nowin (note, could be a tie board)
+gamestate ith_col_win(const node* n, int i) {
 	const spot* b = n->board;
-	for(int i = 0; i < 3; ++i) {
-		if(b[i] == b[3 + i] && b[3 + i] == b[3*2 + i]) {
-			if(b[i] == x) { return xwin; }
-			else if(b[i] == o) { return owin; }
-		}
+	if(b[i] == b[3 + i] && b[3 + i] == b[3*2 + i]) {
+		if(b[i] == x) { return xwin; }
+		else if(b[i] == o) { return owin; }
 	}
 	return nowin;
 }
 
-//does either player win on a row?
+// Return which player wins on any column, if none then nowin.
+gamestate col_win(const node* n) {
+	for(int i = 0; i < 3; ++i) {
+		gamestate res = ith_col_win(n, i);
+		if(res != nowin) { return res; }
+	}
+	return nowin;
+}
+
+// Return which player wins on ith row, if no winner return nowin.
+gamestate ith_row_win(const node* n, int i) {
+	const spot* b = n->board;
+	if(b[3*i] == b[3*i + 1] && b[3*i + 1] == b[3*i + 2]) {
+		if(b[3*i] == x) { return xwin; }
+		else if(b[3*i] == o) { return owin; }
+	}
+	return nowin;
+}
+
+// Return which player wins on a row, else nowin.
 gamestate row_win(const node* n) {
 	const spot* b = n->board;
 	for(int i = 0; i < 3; ++i) {
-		if(b[3*i] == b[3*i + 1] && b[3*i + 1] == b[3*i + 2]) {
-			if(b[3*i] == x) { return xwin; }
-			else if(b[3*i] == o) { return owin; }
-		}
+		gamestate res = ith_row_win(n, i);
+		if(res != nowin) { return res; }
 	}
 	return nowin;
 }
 
-//does either player win on a diagonal? or no win, if tie or no spots
+// Return which player wins on a diagonal, if none then nowin.
 gamestate diag_win(const node* n) {
 	const spot* b = n->board;
-	bool majorDiagWin = b[0] == b[3*1 + 1] && b[3*1 + 1] == b[3*2 + 2] && b[0] != empty;
-	bool minorDiagWin = b[2] == b[3*1 + 1] && b[3*1 + 1] == b[3*2] && b[2] != empty;
-	if(majorDiagWin) {
+	bool majorDiagWin = b[0] == b[4] && b[4] == b[8] && b[0] != empty;
+		if(majorDiagWin) {
 		if(b[0] == x) { return xwin; }
 		else if(b[0] == o) { return owin; }
 	}
-	else if(minorDiagWin) {
+	
+	bool minorDiagWin = b[2] == b[4] && b[4] == b[6] && b[2] != empty;
+	if(minorDiagWin) {
 		if(b[2] == x) { return xwin; }
 		else if(b[2] == o) { return owin; }
 	}
 	return nowin;
 }
 
-//return true if no empty spaces left
+// Are there no moves left? ie. true if no empty spots on board
 bool no_moves(const node* n) {
 	const spot* b = n->board;
 	for(int i = 0; i < 9; ++i) {
@@ -104,9 +124,7 @@ bool no_moves(const node* n) {
 	return true;
 }
 
-
-
-
+// Return the game result-> xwin, owin, tie, or nowin(meaning game not over)
 gamestate whowon(const node* n) {
 	if(row_win(n) != nowin) { return row_win(n); }
 	else if(col_win(n) != nowin) { return col_win(n); }
@@ -116,19 +134,21 @@ gamestate whowon(const node* n) {
 }	
 
 
-//is the game over at this node?
+// Is the game over at this node?
 bool gameover(const node* n) {
 	return whowon(n) != nowin;
 }
 
 
+// Given who just moved, get who should move next. (x -> o and o/empty -> x)
 spot getNextMover(spot justMoved) {
 	if(justMoved == x) { return o; }
 	else { return x; }
 }
 
 
-//makes a new node that is prev but with the new move made (copy)
+// Makes/allocates a new node that is like the previous but with the new move made.
+// m is 0 - 8 for which spot to play the piece
 node* node_move(const node* prev, int m) {
 	node* newNode = (node*) malloc(sizeof(node));
 	const spot* prevBoard = prev->board;
@@ -138,7 +158,6 @@ node* node_move(const node* prev, int m) {
 	}
 	newBoard[m] = prev->movesNext;
 	newNode->movesNext = getNextMover(prev->movesNext);
-	newNode->mPrintNode = printBoard;
 	newNode->score = 0;
 
 	node** newNextMoves = newNode->nextMoves;
@@ -149,6 +168,7 @@ node* node_move(const node* prev, int m) {
 }
 
 
+// Return the computer's response to the given state
 node* computerResponse(const node* start) {
 	int bestIdx = 0;
 	float bestScore = -100;
@@ -163,7 +183,9 @@ node* computerResponse(const node* start) {
 }
 
 
-//if a spot already occupied is chosen, no move made
+// Makes the given move (ie. places a piece at position m).
+// Then, if the game isn't over the computer makes a move. Outputs final board state.
+// If the position m is already taken, return prev.
 node* make_move(node* prev, int m) {
 	if(prev->board[m] != empty) { return prev; }
 	node* afterUserMoveM = NULL;
@@ -181,7 +203,8 @@ node* make_move(node* prev, int m) {
 }
 
 
-
+// Helper function to continue making a tree, starting from the given node.
+// Note, this is via mutation of prev. If the game is over, no further moves made.
 void make_tree_helper(node* prev) {
 	if(gameover(prev)) { 
 		return;
@@ -199,11 +222,13 @@ void make_tree_helper(node* prev) {
 	}
 }
 
+// Print the score associated with node who. For testing/debugging.
 void printScore(const node* who) {
 	printf("score: %d", who->score);
 }
 
-	
+
+// Update the scores of nodes starting from n and going down the tree.
 void update_scores(node* n) {
 	gamestate res = whowon(n);
 	if(res == xwin) { n->score = -1; }
@@ -236,15 +261,16 @@ void update_scores(node* n) {
 }
 
 
-//computer is o
-node* make_tree() {
-	node* first = node_create(x);
+// Makes a tic tac toe move tree. First person to move is player firstMove.
+node* make_tree(spot firstMove) {
+	node* first = node_create(firstMove);
 	make_tree_helper(first);
 	update_scores(first);
 	return first;
 }
 
 
+// Prints a board and the result (winner or tie)
 void printFinal(const node* n) {
 	printBoard(n);
 	gamestate result = whowon(n);
@@ -254,8 +280,9 @@ void printFinal(const node* n) {
 }
 
 
+// Plays the tic tac toe game.
 void playGame() {
-	node* game = make_tree();
+	node* game = make_tree(x);
 	printf("Tic Tac Toe\n");
 	printf("X : User\n");
 	printf("O : Comp\n");
@@ -264,9 +291,9 @@ void playGame() {
 	//game = computerResponse(game); if comp goes first, change make_tree to o
 	while(game != NULL && !gameover(game)) {
 		printBoard(game);
-		printf("\nEnter move (0-8): ");
+		printf("\nEnter move (1-9): ");
 		scanf("%d", &userMove);
-		game = make_move(game, userMove);
+		game = make_move(game, userMove - 1); //real board is 0-indexed
 	}
 
 	printFinal(game);
@@ -274,14 +301,12 @@ void playGame() {
 
 
 void tester() {
-	node* a = make_tree();
+	node* a = make_tree(x);
 	//printBoard(a);
 	//a = make_move(a, 2);
 	//a = node_create(x);
 	
 	//node* a = node_create(x);
-	//a->mPrintNode(a);
-	//node* b = make_tree();
 	//a = a->nextMoves[1]->nextMoves[0]->nextMoves[2]->nextMoves[2]->nextMoves[0]->nextMoves[2]->nextMoves[2];
 	//a = a->nextMoves[0]->nextMoves[0]->nextMoves[6]->nextMoves[2]->nextMoves[4];//->nextMoves[2];//->nextMoves[1];
 	//a = a->nextMoves[4]->nextMoves[0]->nextMoves[0];//->nextMoves[0];
@@ -290,21 +315,18 @@ void tester() {
 	printBoard(a);
 	for(int i = 0; i < 9; ++i) {
 		if(a->nextMoves[i] != NULL) {
-			a->nextMoves[i]->mPrintNode(a->nextMoves[i]);
+			printBoard(a->nextMoves[i]);
 			printf("\n");
 			printScore(a->nextMoves[i]);
 			printf("\n");
 		}
 	}
-	//printBoard(head);
-	//node* b = node_move(a, o);
-	//b->mPrintNode(b);
 }
 
 
 int main() {
 	//tester();
-	playGame();
+	playGame(x);
 	return 0;
 }
 
